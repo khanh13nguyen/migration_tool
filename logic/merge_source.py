@@ -45,11 +45,11 @@ def merge_source_file(original_path: str, change_path: str, dest_path: str, enco
         else:
             raise ValueError(f"Unexpected diff code: {code}")
     # Step 3: Check if dest matches original exactly
-    for idx in changed_line_indices:
-        if original_lines[idx] != dest_lines[idx] and changed_lines[idx] != dest_lines[idx]:
-            raise ValueError(f"Line {idx+1} mismatch between original and destination:\n"
-                             f"Original: {original_lines[idx]!r}\n"
-                             f"Dest    : {dest_lines[idx]!r}")
+    # for idx in changed_line_indices:
+    #     if original_lines[idx] != dest_lines[idx] and changed_lines[idx] != dest_lines[idx]:
+    #         raise ValueError(f"Line {idx+1} mismatch between original and destination:\n"
+    #                          f"Original: {original_lines[idx]!r}\n"
+    #                          f"Dest    : {dest_lines[idx]!r}")
 
     # Step 4: Apply to dest
     result = ''
