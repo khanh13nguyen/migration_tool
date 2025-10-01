@@ -1,6 +1,5 @@
 # -*- coding: euc_jp -*-
 
-from pathlib import Path
 import os
 from dotenv import load_dotenv
 from dataclasses import dataclass
@@ -9,9 +8,9 @@ from utils import common_util
 load_dotenv()
 
 
-SUB_ITEM_FOLDER_OPTIONS = ['SELECT', 'INSERT', 'UPDATE', 'DELETE', 'MERGE']
+SUB_ITEM_FOLDER_OPTIONS = ['SELECT', 'INSERT', 'UPDATE', 'DELETE', 'MERGE', 'IMPORT', 'DDL']
 
-SUB_ITEM_FOLDER_FOR_SOURCE_C_OPTIONS = ['NEXTVAL', 'SQLCA', "EXEC_SQL", "DB2_CONNECT", "SQLINT", "SQL_H"]
+SUB_ITEM_FOLDER_FOR_SOURCE_C_OPTIONS = ['NEXTVAL', 'SQLCA', "EXEC_SQL", "DB2_CONNECT", "SQLINT", "SQL_H", "SQLCODE", "No20"]
 
 SHEET_CONFIG_MAP = {
     "schema": {"number_header_rows": 3, "filter_columns": ["D"], "num_cols": 8, "num_rows": 15},
@@ -29,6 +28,9 @@ SHEET_CONFIG_MAP = {
 }
 
 EVIDENCE_EXCEL_SHEETS = ["schema", "table", 'column', 'key', 'type1.1' , 'type1.2',  'type2.1' , 'type2.2', 'type2.3', 'type3.1' , 'type3.2', 'type3.3']
+
+#
+NOTHING_TO_FIX_FILE_NAME = "修正対象ソースコードがないため、対応不要.txt"
 
 # COMMON CONFIG PATH
 OUTPUT_EVIDENCE_EXCEL_NAME = "evidence.xlsx"
@@ -102,18 +104,21 @@ def get_configs_by_source_type(source_type: str) -> SouceConfig:
                 C_ROOT_APP_PATH,
                 C_ROOT_OUTPUT_PATH,
                 C_SVN_ROOT_PATH,
-                 ['_after.sqc', '_after.h', '_after.sh', '_after.c', '_after.txt'],
+                 ['_after.sqc', '_after.h', '_after.sh', '_after.c', '_after.txt', '_after.conf', '_after.ini'],
                  {
-                    "SELECT": [1,2,3,5,6,7,8,9,10,11,12,13,14,15,17,29,30],
+                    "SELECT": [1,2,5,6,7,8,9,10,11,12,13,14,15,17,29,30],
                     "UPDATE": [1,2, 4,5,6,7,8,9,10,12,13,15,29,30],
                     "INSERT": [1,2,5,6,7,8,9,10,12,13,15,29,30],
                     "DELETE": [1,2,5,6,7,8,9,10,12,13,15,29,30],
                     "MERGE": [1,2, 4,5,6,7,8,9,10,12,13,15,29,30],
+                    "IMPORT": [1],
+                    "DLL": [1],
+                    "SQLCODE": [22],
                     'NEXTVAL': [3],
                     "SQLCA": [16, 19, 26],
-                    "EXEC_SQL": [18, 20, 25],
+                    "EXEC_SQL": [18, 25],
                     "DB2_CONNECT": [18],
-                    "No.20": [20],
+                    "No20": [20],
                     "SQLINT": [21],
                     "SQL_H": [27],
                     "db2SQL": [28, 29, 30],

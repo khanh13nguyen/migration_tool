@@ -12,6 +12,36 @@ import xlwings as xw
 from utils import file_utils
 from logic import merge_source
 from tools import validate_rule_tool
+import difflib
+from streamlit.components.v1 import html
+
+def show_diff(lines, new_lines):
+    # Generate side-by-side diff
+    differ = difflib.HtmlDiff(wrapcolumn=80)
+    diff_table = differ.make_table(
+        lines,
+        new_lines,
+        fromdesc="Original",
+        todesc="Processed",
+        context=True,   # only show surrounding changes
+        numlines=1      # lines of context
+    )
+
+    # Custom CSS to make it look modern
+    custom_css = """
+    <style>
+    table.diff {font-family: monospace; border-collapse: collapse; width: 100%;}
+    .diff_header {background-color: #f0f0f0; font-weight: bold;}
+    td, th {padding: 4px 8px;}
+    .diff_next {background-color: #e0e0e0;}
+    .diff_add {background-color: #e6ffe6;}  /* green */
+    .diff_chg {background-color: #ffffcc;}  /* yellow */
+    .diff_sub {background-color: #ffe6e6;}  /* red */
+    </style>
+    """
+    if diff_table:
+        st.markdown("### Differences (Original vs Processed)")
+        html(custom_css + diff_table, height=600, scrolling=True)
 
 
 st.set_page_config(page_title="Code Checker", layout="wide")
@@ -24,10 +54,11 @@ tab_titles = [
     "Merge Source Files",
     "Check rule 2 XO",
     "Manual Replace Tool",
-    "Tools for source C"
+    "Tools for source C",
+    "Correct formatting files"
 ]
 
-tab1, tab2, tab3, tab4, tab5, tab6, tab7= st.tabs(tab_titles)
+tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8= st.tabs(tab_titles)
 
 with tab1:
     SOURCE_TYPE = st.radio("Source Type", SOURCE_TYPE_OPTIONS, horizontal=True, key="source_type_tab1")
@@ -452,12 +483,20 @@ with tab4:
                                         st.write(f"Original file: {original_path_file}")
                                         st.write(f"Change file: {change_path_file}")
                                         st.write(f"Destination file: {dest_file_path}")
-                                        encoding = handler.get_encoded_file(original_path_file)
-                                        if not encoding:
-                                            st.error(f"{encoding}: Encoding could not be detected for {original_path_file}")
+                                        src_encoding = handler.get_encoded_file(original_path_file)
+                                        change_encoding = handler.get_encoded_file(change_path_file)
+                                        dest_encoding = handler.get_encoded_file(dest_file_path)
+                                        if src_encoding != change_encoding:
+                                            st.error(f"Encoding mismatch between original ({src_encoding}) and change ({change_encoding}) files.")
                                             continue
-                                        change_code = merge_source.merge_source_file(original_path_file, change_path_file, dest_file_path, encoding)
-                                        st.code(f"Change code:{encoding}\n {change_code}")
+                                        elif src_encoding != dest_encoding:
+                                            st.error(f"Encoding mismatch between original ({src_encoding}) and destination ({dest_encoding}) files.")
+                                            continue
+                                        if not src_encoding:
+                                            st.error(f"{src_encoding}: Encoding could not be detected for {original_path_file}")
+                                            continue
+                                        change_code = merge_source.merge_source_file(original_path_file, change_path_file, dest_file_path, dest_encoding)
+                                        st.code(f"Change code:{src_encoding}\n\n {change_code}")
                                         count += 1
                                         st.success(f"Merge source for No.{item_no} completed successfully")
                                 except Exception as e:
@@ -557,11 +596,14 @@ with tab6:
                 line_indexes = list(range(0, len(lines)))
                 active_rule_set = set(source_configs.RULE_CONFIGS.get(selected_sheet_name6.upper(), []))
                 new_lines = handler.process_and_replace_lines(app, lines, line_indexes, evidence_excel_path, source_type, active_rule_set,  system_types, extra_tables)
+
+                show_diff(lines, new_lines)
                 st.markdown("### Processed Code with Replacements")
+                final_code = "".join(new_lines)
                 if is_export_excel:
                     st.warning(f"Exported evidence to: {evidence_excel_path}")
-                final_code = "".join(new_lines)
                 st.code(final_code)
+
             finally:
                 if 'app' in locals() and app:
                     app.quit()
@@ -569,6 +611,16 @@ with tab6:
                 
 with tab7:
     SOURCE_TYPE7 = st.radio("Source Type", SOURCE_TYPE_OPTIONS ,  index= 1,horizontal=True, key="source_type_tab7", disabled=True)
+    
+    default_value_file_name = selected_excel_file_name2
+    if default_value_file_name == None:
+        default_value_file_name = ''
+    selected_excel_file_name7 = st.text_input(
+        "Select excel file name",
+        value=default_value_file_name, 
+        key="excel_file_name_tab7"
+    )
+
     selected_sheet_name = st.selectbox(
         "Select sheet name",
         options=SUB_ITEM_FOLDER_FOR_SOURCE_C_OPTIONS,
@@ -595,7 +647,7 @@ with tab7:
             st.warning(" Please input item list")
         else:
             source_configs = get_configs_by_source_type(SOURCE_TYPE7)
-            FULL_ITEM_ROOT_PATH = f'{source_configs.ROOT_OUTPUT_PATH}/{selected_sheet_name}'
+            FULL_ITEM_ROOT_PATH = f'{source_configs.ROOT_OUTPUT_PATH}/{selected_excel_file_name7}/{selected_sheet_name}'
             FULL_DAILY_FOLDER_PATH = f"{FULL_ITEM_ROOT_PATH}/{DAILY_FOLDER_STR}" if DAILY_FOLDER_STR else None
 
             raw_lines = txt_items.strip().splitlines()
@@ -612,7 +664,7 @@ with tab7:
                 st.error("Some lines are invalid:")
                 st.code("\n".join(errors))
             else:
-                item_map = {item_no: (src_label, full_file_name, start_line) for item_no, src_label, full_file_name, start_line in items}
+                item_map = {int(item_no): (src_label, full_file_name, start_line) for item_no, src_label, full_file_name, start_line in items}
                 created_items = []
 
                 for item_no in sorted(item_map.keys()):
@@ -631,6 +683,7 @@ with tab7:
                         des_excel_path = f'{des_folder_name}/{EXCEL_FILE_NAME}'
                         des_html_path = f'{des_folder_name}/{HTML_FILE_NAME}'
                         des_evidence_path = f'{des_folder_name}/{OUTPUT_EVIDENCE_EXCEL_NAME}'
+                        nothing_to_fix_file_path = f"{des_folder_name}/{NOTHING_TO_FIX_FILE_NAME}"
 
                         st.markdown(f"## Start process for No.{item_no}")
                         # Copy template files
@@ -638,6 +691,7 @@ with tab7:
                             st.warning(f"File already exists, skipping copy: {des_path}")
                         else:
                             shutil.copy(src_path, des_path)
+                            os.chmod(des_path, 0o666)
 
                         if os.path.exists(des_path_after):
                             os.remove(des_path_after)
@@ -647,6 +701,7 @@ with tab7:
                         os.chmod(des_path_after, 0o666)
                         # shutil.copy(TEMPLATE_EXCEL_PATH, des_excel_path)
                         shutil.copy(TEMPLATE_HTML_PATH, des_html_path)
+                        os.chmod(des_html_path, 0o666)
                         # shutil.copy(FULL_EVIDENCE_INPUT_PATH, des_evidence_path)
                         
                         # Process it
@@ -700,7 +755,97 @@ with tab7:
                             lines[line_index - 1] = new_lines
                             with open(des_path_after, 'w', encoding=encoding, newline="") as f:
                                 f.writelines(lines)
+                            st.warning(des_html_path)
+                            # winmerge_util.run_winmerge(des_path, des_path_after, des_html_path)
+                        else:
+                            open(nothing_to_fix_file_path, "w").close()
+                            st.error("Nothing to fix")
+                            os.remove(des_path)
+                            os.remove(des_path_after)
+                            os.remove(des_html_path)
+                        st.success(f"Finished No.{item_no}: Lines {start_line}, Encoding: {encoding}")
+                    except Exception as e:
+                        st.error(f"Failed to create item No.{item_no}: {e}")
+                    
+with tab8:
+    SOURCE_TYPE8 = st.radio("Source Type", SOURCE_TYPE_OPTIONS ,  index= 1,horizontal=True, key="source_type_tab8")
+    txt_items = st.text_area("Input list (tab-separated: NO, FILE_PATH, FILE_NAME, START_LINE):", height=300, key="input_list_tab8")
 
+    btn_col1, = st.columns(1)
+    btn_fix_unix_format = btn_col1.button("FIX", key="btn_init_tab8")
+    if btn_fix_unix_format:
+        if not txt_items.strip():
+            st.warning(" Please input item list")
+        else:
+            source_configs = get_configs_by_source_type(SOURCE_TYPE7)
+
+            raw_lines = txt_items.strip().splitlines()
+            items = []
+            errors = []
+            for idx, line in enumerate(raw_lines, start=1):
+                parts = re.split(r'[\t]+', line.strip())
+                if len(parts) != 4:
+                    errors.append(f"Line {idx} is invalid: {line}")
+                    continue
+                items.append(parts)
+
+            if errors:
+                st.error("Some lines are invalid:")
+                st.code("\n".join(errors))
+            else:
+                item_map = {item_no: (src_label, full_file_name, start_line) for item_no, src_label, full_file_name, start_line in items}
+                created_items = []
+
+                for item_no in sorted(item_map.keys()):
+                    src_label, full_file_name, start_line = item_map.get(item_no)
+                    # Extract file info
+                    try:
+                        file_type = full_file_name.split('.')[-1]
+                        file_name = full_file_name.rsplit('.', 1)[0]
+                        
+                        src_path = source_configs.ROOT_APP_PATH + "/" +''.join((src_label, full_file_name))[1:] 
+                        svn_path = source_configs.SVN_ROOT_PATH + "/" +''.join((src_label, full_file_name))[1:]
+
+                        st.markdown(f"## Start process for No.{item_no}")
+                        st.write(str(src_path))
+                        st.write(str(svn_path))
+                        encoding = handler.get_encoded_file(svn_path)
+                        if not encoding:
+                            st.error(f"Encoding could not be detected for {des_path_after}")
+                            continue
+
+                        src_content = None
+                        svn_content = None
+                        with open(src_path, "r", encoding=encoding, newline="") as f:
+                            src_content = f.read()
+                        with open(svn_path, "r", encoding=encoding, newline="") as f:
+                            svn_content = f.read()
+                        old_svn_content = svn_content
+                        if src_content and svn_content:
+                            original_format = "Windows" if "\r\n" in src_content else "Unix" if "\n" in src_content else "Unknown"
+                            svn_format = "Windows" if "\r\n" in svn_content else "Unix" if "\n" in svn_content else "Unknown"
+                            st.write(f"Original format: {original_format}, SVN format: {svn_format}")
+                            if original_format != svn_format:
+                                replace_format = None
+                                if original_format =="Windows":
+                                    replace_format = "\r\n"
+                                elif original_format == "Unix":
+                                    replace_format = "\n"
+                                if replace_format == "\r\n":
+                                    old_format =  "\n"
+                                else:
+                                    old_format = "\r\n"
+
+                                svn_content = svn_content.replace(old_format,  replace_format)
+                                if svn_content != old_svn_content:
+                                    st.code(f"Original content sample:\n{repr(old_svn_content[:200])}")
+                                    st.code(f"Processed content sample:\n{repr(svn_content[:200])}")
+                                    st.write("Content format changed, updating file...")
+                                    with open(svn_path, 'w', encoding=encoding, newline="") as f:
+                                        f.writelines(svn_content)
+                        else:
+                            st.warning(f"No content read from {svn_path}")
+                            continue
                         st.success(f"Finished No.{item_no}: Lines {start_line}, Encoding: {encoding}")
                     except Exception as e:
                         st.error(f"Failed to create item No.{item_no}: {e}")

@@ -6,9 +6,10 @@ from typing import List, Tuple
 from config import OUTPUT_EVIDENCE_EXCEL_NAME
 from logic.mapping import build_full_mapping, build_mappings, get_full_schema_table_and_column_names_from_sheets
 from logic.text_processing import extract_full_keys, replace_by_mapping
+from utils import charset_util
 from utils.excel_utils import filter_excel
 from typing import Dict
-import chardet
+
 import pandas as pd
 from config import FULL_EVIDENCE_INPUT_PATH
 import xlwings as xw
@@ -18,46 +19,24 @@ from rules import detect_rules
 def get_encoded_file(file_path: str | Path, return_content: bool = False):
     file_path = Path(file_path)
     raw = file_path.read_bytes()
-    common_encodings = [
-        'euc_jp',          # EUC-JP (Unix/Linux Japanese files)
-        'cp932',           # Windows Japanese (Shift_JIS variant, most common on Windows)
-        'shift_jis',       # Standard legacy Shift_JIS
-        'shift_jisx0213',  # Extended Shift_JIS (rare/modern Kanji)
-        'iso2022_jp',      # JIS encoding (used in emails, older systems)
-        'iso2022_jp_1',    # Variant of ISO-2022-JP
-        'iso2022_jp_2',    # Another variant (supports extended characters)
-        'iso2022_jp_3',    # Rare, used for some Japanese emails
-        'iso2022_jp_ext',  # Extension for ISO-2022-JP
-        'utf-8',           # Modern Unicode, safe for Japanese
-        'utf-16',
-        'utf-32',        # Unicode variants, less common for Japanese text files
-        'utf-8-sig',       # UTF-8 with BOM, sometimes in Excel/Notepad
-        'ascii'            # Strict ASCII, safe if only basic chars
-    ]
 
+    encoding = charset_util.detect_encode(raw)
+    detect_encoding = charset_util.detect_encode_use_lib(raw)
 
-    encoding = None
-    content = None
-
-    # Try common encodings first
-    for enc in common_encodings:
-        try:
-            decoded = raw.decode(enc)
-            encoding = enc
-            content = decoded
-            break
-        except UnicodeDecodeError:
-            # st.warning(f"Failed to decode {file_path.name} with {enc}")
-            pass
-    
-    # Fallback to chardet if none worked
     if encoding is None:
         st.warning(f"Failed to decode {file_path.name} with common encodings. Using chardet to detect encoding.")
-        detected = chardet.detect(raw)
-        encoding = detected.get("encoding") or "utf-8"
-        try:
-            content = raw.decode(encoding, errors="replace")
-        except Exception:
+        encoding = detect_encoding
+    elif detect_encoding.upper() != encoding.upper():
+        st.code(file_path)
+        st.warning(
+            f"Detected encoding `{detect_encoding.upper()}` differs from the expected encoding `{encoding.upper()}`. "
+            f"Using: {encoding.upper()}.\n"
+              "Please ensure that the Change file and Destination file use the same encoding before merging."
+        )
+
+    try:
+        content = raw.decode(encoding)
+    except Exception:
             encoding = "utf-8"
             content = raw.decode(encoding, errors="replace")
 
